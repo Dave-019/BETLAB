@@ -12,37 +12,38 @@ RUN apt-get update && apt-get install -y \
     unzip \
     curl
 
-# 2. Install PHP extensions
+# 2. Clean apt cache to reduce image size
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 3. Install PHP extensions
+# (Removed ctype, tokenizer, and pdo as they are already in the PHP 8.3 core)
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
     bcmath \
-    ctype \
-    fileinfo \
     gd \
     mbstring \
     mysqli \
-    pdo \
     pdo_mysql \
-    tokenizer \
-    xml \
-    zip
+    zip \
+    xml
 
-# 3. Enable Apache mod_rewrite for .htaccess
+# 4. Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
-# 4. Set PHP settings (allow_url_fopen is ON by default in this image)
-RUN echo "allow_url_fopen=On" > /usr/local/etc/php/conf.d/custom.ini
-RUN echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/custom.ini
-RUN echo "upload_max_filesize=100M" >> /usr/local/etc/php/conf.d/custom.ini
-RUN echo "post_max_size=100M" >> /usr/local/etc/php/conf.d/custom.ini
+# 5. Set PHP settings
+RUN echo "allow_url_fopen=On" > /usr/local/etc/php/conf.d/custom.ini \
+    && echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/custom.ini \
+    && echo "upload_max_filesize=128M" >> /usr/local/etc/php/conf.d/custom.ini \
+    && echo "post_max_size=128M" >> /usr/local/etc/php/conf.d/custom.ini
 
-# 5. Copy application files
+# 6. Copy application files
 COPY . /var/www/html
 
-# 6. Set permissions
+# 7. Set permissions for ViserLab/Laravel
 RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 /var/www/html
+    && find /var/www/html -type d -exec chmod 755 {} \; \
+    && find /var/www/html -type f -exec chmod 644 {} \; \
+    && if [ -d /var/www/html/core/storage ]; then chmod -R 775 /var/www/html/core/storage; fi \
+    && if [ -d /var/www/html/core/bootstrap/cache ]; then chmod -R 775 /var/www/html/core/bootstrap/cache; fi
 
 WORKDIR /var/www/html
-
-EXPOSE 80
