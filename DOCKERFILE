@@ -11,9 +11,13 @@ RUN apt-get update && apt-get install -y \
     libonig-dev \
     unzip \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions (only ones NOT already built-in)
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg
 
 RUN docker-php-ext-install -j$(nproc) \
@@ -25,10 +29,6 @@ RUN docker-php-ext-install -j$(nproc) \
     xml \
     zip \
     pcntl
-
-# These are already included in PHP 8.3:
-# ctype, curl, dom, fileinfo, filter, hash, json,
-# openssl, pcre, session, tokenizer
 
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite
@@ -49,6 +49,9 @@ WORKDIR /var/www/html
 
 # Copy application files
 COPY . /var/www/html/
+
+# Install Composer dependencies
+RUN cd /var/www/html/core && composer install --no-dev --optimize-autoloader --no-interaction
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
