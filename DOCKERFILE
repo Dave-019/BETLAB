@@ -1,6 +1,6 @@
 FROM php:8.3-apache
 
-# 1. Install system dependencies
+# 1. Install system dependencies and Git (needed for Composer)
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libjpeg-dev \
@@ -10,13 +10,10 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     zip \
     unzip \
-    curl
+    curl \
+    git
 
-# 2. Clean apt cache to reduce image size
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# 3. Install PHP extensions
-# (Removed ctype, tokenizer, and pdo as they are already in the PHP 8.3 core)
+# 2. Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
     bcmath \
@@ -27,19 +24,23 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     zip \
     xml
 
+# 3. Install Composer (The missing piece)
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
 # 4. Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
-# 5. Set PHP settings
-RUN echo "allow_url_fopen=On" > /usr/local/etc/php/conf.d/custom.ini \
-    && echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/custom.ini \
-    && echo "upload_max_filesize=128M" >> /usr/local/etc/php/conf.d/custom.ini \
-    && echo "post_max_size=128M" >> /usr/local/etc/php/conf.d/custom.ini
-
-# 6. Copy application files
+# 5. Copy application files
 COPY . /var/www/html
 
-# 7. Set permissions for ViserLab/Laravel
+# 6. Install PHP dependencies
+# This moves into the 'core' folder and runs composer install
+RUN if [ -f /var/www/html/core/composer.json ]; then \
+    cd /var/www/html/core && \
+    composer install --no-dev --optimize-autoloader --ignore-platform-reqs; \
+    fi
+
+# 7. Set permissions
 RUN chown -R www-data:www-data /var/www/html \
     && find /var/www/html -type d -exec chmod 755 {} \; \
     && find /var/www/html -type f -exec chmod 644 {} \; \
