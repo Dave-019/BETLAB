@@ -8,56 +8,46 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     libxml2-dev \
     libcurl4-openssl-dev \
+    libonig-dev \
     unzip \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure and install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install \
+# Install PHP extensions (only ones NOT already built-in)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg
+
+RUN docker-php-ext-install -j$(nproc) \
     bcmath \
-    ctype \
-    curl \
-    dom \
-    fileinfo \
     gd \
     mbstring \
     pdo \
     pdo_mysql \
-    tokenizer \
     xml \
     zip \
-    filter \
-    session \
     pcntl
+
+# These are already included in PHP 8.3:
+# ctype, curl, dom, fileinfo, filter, hash, json,
+# openssl, pcre, session, tokenizer
 
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite
 
-# Set PHP configuration
+# PHP configuration
 RUN echo "allow_url_fopen = On" >> /usr/local/etc/php/conf.d/custom.ini \
     && echo "memory_limit = 256M" >> /usr/local/etc/php/conf.d/custom.ini \
     && echo "upload_max_filesize = 64M" >> /usr/local/etc/php/conf.d/custom.ini \
     && echo "post_max_size = 64M" >> /usr/local/etc/php/conf.d/custom.ini \
     && echo "max_execution_time = 300" >> /usr/local/etc/php/conf.d/custom.ini
 
-# Set Apache DocumentRoot
-ENV APACHE_DOCUMENT_ROOT=/var/www/html
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
-    && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf
-
-# Configure Apache to allow .htaccess
-RUN echo '<Directory /var/www/html>\n\
-    AllowOverride All\n\
-    Require all granted\n\
-</Directory>' > /etc/apache2/conf-available/custom.conf \
+# Allow .htaccess overrides
+RUN printf '<Directory /var/www/html>\n    AllowOverride All\n    Require all granted\n</Directory>\n' \
+    > /etc/apache2/conf-available/custom.conf \
     && a2enconf custom
 
-# Set working directory
 WORKDIR /var/www/html
 
 # Copy application files
-# Make sure files from the "Files" folder are in the build context root
 COPY . /var/www/html/
 
 # Set permissions
