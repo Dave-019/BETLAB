@@ -405,15 +405,29 @@ function dateSorting($arr) {
 }
 
 function gs($key = null) {
-    $general = Cache::get('GeneralSetting');
-    if (!$general) {
-        $general = GeneralSetting::first();
-        Cache::put('GeneralSetting', $general);
+    try {
+        $general = Cache::get('GeneralSetting');
+        if (!$general) {
+            $general = GeneralSetting::first();
+            if (!$general) {
+                // Create a temporary object so the site doesn't crash
+                $general = new stdClass();
+                $general->site_name = 'BetLab';
+                $general->cur_text = 'USD';
+                $general->cur_sym = '$';
+                $general->active_template = 'basic';
+                return $key ? $general->$key : $general;
+            }
+            Cache::put('GeneralSetting', $general);
+        }
+    } catch (\Exception $e) {
+        $general = new stdClass();
+        $general->site_name = 'BetLab';
+        return $key ? $general->$key : $general;
     }
     if ($key) {
         return @$general->$key;
     }
-
     return $general;
 }
 function isImage($string) {
