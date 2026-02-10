@@ -1,65 +1,48 @@
 FROM php:8.3-apache
 
-# Install system dependencies
+# 1. Install system dependencies
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
     libzip-dev \
-    libxml2-dev \
-    libcurl4-openssl-dev \
     libonig-dev \
+    libxml2-dev \
+    zip \
     unzip \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+    curl
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-# Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg
-
-RUN docker-php-ext-install -j$(nproc) \
+# 2. Install PHP extensions
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
     bcmath \
+    ctype \
+    fileinfo \
     gd \
     mbstring \
+    mysqli \
     pdo \
     pdo_mysql \
+    tokenizer \
     xml \
-    zip \
-    pcntl
+    zip
 
-# Enable Apache mod_rewrite
+# 3. Enable Apache mod_rewrite for .htaccess
 RUN a2enmod rewrite
 
-# PHP configuration
-RUN echo "allow_url_fopen = On" >> /usr/local/etc/php/conf.d/custom.ini \
-    && echo "memory_limit = 256M" >> /usr/local/etc/php/conf.d/custom.ini \
-    && echo "upload_max_filesize = 64M" >> /usr/local/etc/php/conf.d/custom.ini \
-    && echo "post_max_size = 64M" >> /usr/local/etc/php/conf.d/custom.ini \
-    && echo "max_execution_time = 300" >> /usr/local/etc/php/conf.d/custom.ini
+# 4. Set PHP settings (allow_url_fopen is ON by default in this image)
+RUN echo "allow_url_fopen=On" > /usr/local/etc/php/conf.d/custom.ini
+RUN echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/custom.ini
+RUN echo "upload_max_filesize=100M" >> /usr/local/etc/php/conf.d/custom.ini
+RUN echo "post_max_size=100M" >> /usr/local/etc/php/conf.d/custom.ini
 
-# Allow .htaccess overrides
-RUN printf '<Directory /var/www/html>\n    AllowOverride All\n    Require all granted\n</Directory>\n' \
-    > /etc/apache2/conf-available/custom.conf \
-    && a2enconf custom
+# 5. Copy application files
+COPY . /var/www/html
+
+# 6. Set permissions
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 775 /var/www/html
 
 WORKDIR /var/www/html
 
-# Copy application files
-COPY . /var/www/html/
-
-# Install Composer dependencies
-RUN cd /var/www/html/core && composer install --no-dev --optimize-autoloader --no-interaction
-
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html \
-    && chmod -R 775 /var/www/html/core/storage 2>/dev/null || true \
-    && chmod -R 775 /var/www/html/core/bootstrap/cache 2>/dev/null || true \
-    && chmod -R 775 /var/www/html/assets 2>/dev/null || true
-
 EXPOSE 80
-
-CMD ["apache2-foreground"]
